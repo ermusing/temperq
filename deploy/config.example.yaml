@@ -1,0 +1,29 @@
+# temperq main configuration. No secrets here: they go in the credentials file.
+# Every setting can be overridden by an env var, e.g. TEMPERQ_MQTT_HOST, TEMPERQ_SENSOR_DRIVER.
+
+node_id: temperq            # used in MQTT discovery IDs; keep stable once HA knows the device
+device_name: TemperQ        # device name shown in Home Assistant
+log_level: INFO
+credentials_file: /etc/temperq/credentials.yaml
+
+mqtt:
+  host: homeassistant.local
+  port: 1883
+  client_id: temperq
+  base_topic: temperq
+  discovery_prefix: homeassistant
+
+electra:
+  # device_id: 12345        # only needed if the account has more than one AC (`temperq login` lists them)
+  poll_interval: 60         # seconds between cloud status polls
+  command_grace: 20         # seconds a value set from HA is protected from stale cloud status
+  request_timeout: 15
+  min_temp: 16
+  max_temp: 30
+
+sensor:
+  driver: aht30             # aht30 (I2C) | fake (no hardware, for development)
+  i2c_bus: 1
+  i2c_address: 0x38
+  interval: 30              # seconds between reads (minimum 2)
+  max_stale: 600            # mark the sensor unavailable after this long without a good reading

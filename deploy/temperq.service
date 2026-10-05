@@ -1,0 +1,21 @@
+[Unit]
+Description=temperq: ElectraSmart AC and room sensor bridge to MQTT
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=temperq
+Group=temperq
+SupplementaryGroups=i2c
+ExecStart=/opt/temperq/.venv/bin/python -m temperq run --config /etc/temperq/config.yaml
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

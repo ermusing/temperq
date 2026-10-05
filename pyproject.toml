@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "temperq"
+version = "0.1.0"
+description = "Bridge an ElectraSmart AC and a room temperature/humidity sensor to Home Assistant over MQTT"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # Pinned exactly: electra.py patches this library's module-level `requests`
+    # reference to add a timeout, so re-check that before upgrading.
+    "electrasmart==0.8",
+    "requests>=2.25",
+    "aiomqtt>=2.0,<3",
+    "PyYAML>=6.0",
+    # Pure Python, so it installs anywhere, but it only imports on Linux.
+    "smbus2>=0.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.5"]
+
+[project.scripts]
+temperq = "temperq.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]

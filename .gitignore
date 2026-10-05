@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# Local dev config; real secrets must never be committed.
+/config.yaml
+/credentials.yaml
