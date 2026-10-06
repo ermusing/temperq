@@ -23,7 +23,14 @@ from typing import Any
 import aiomqtt
 
 from .config import Config, require_electra_credentials
-from .electra import FAN_MODES, HVAC_MODES, AcState, ElectraClient, ElectraError
+from .electra import (
+    FAN_MODES,
+    HVAC_MODES,
+    MODE_TARGET_TEMPS,
+    AcState,
+    ElectraClient,
+    ElectraError,
+)
 from .mqtt import OFFLINE, ONLINE, Topics, discovery_messages
 from .sensor import Reading, SensorError, TempHumiditySensor, create_sensor, is_plausible
 
@@ -131,11 +138,15 @@ class Bridge:
             await self._publish_ac_state()  # snap HA's UI back to the real value
             return
         log.info("command from HA: %s = %s", field, value)
-        # Show the change right away; the cloud takes a while to reflect it.
-        self.overrides[field] = (value, math.inf)
-        setattr(self.ac, field, value)
+        changes = {field: value}
+        if field == "mode" and value in MODE_TARGET_TEMPS:
+            changes["target_temp"] = MODE_TARGET_TEMPS[value]
+        for f, v in changes.items():
+            # Show the change right away; the cloud takes a while to reflect it.
+            self.overrides[f] = (v, math.inf)
+            setattr(self.ac, f, v)
+            self._commands.put_nowait((f, v))
         await self._publish_ac_state()
-        self._commands.put_nowait((field, value))
 
     def _parse_command(self, field: str, payload: str) -> Any:
         if field == "mode":

@@ -107,6 +107,24 @@ async def test_queued_commands_are_merged(setup):
     assert electra.applied == [{"mode": "heat", "target_temp": 23.0}]
 
 
+@pytest.mark.parametrize("mode, temp", [("cool", "18"), ("heat", "26")])
+async def test_cool_and_heat_force_a_preset_target(setup, mode, temp):
+    bridge, topics, electra, _, _, published = setup
+    await bridge.poll_electra()
+    await bridge.handle_message("temperq/ac/mode/set", mode)
+    assert published[topics.target_temp] == temp
+    await bridge.send_queued_commands({})
+    assert electra.applied == [{"mode": mode, "target_temp": float(temp)}]
+
+
+async def test_other_modes_keep_the_target(setup):
+    bridge, _, electra, _, _, _ = setup
+    await bridge.poll_electra()
+    await bridge.handle_message("temperq/ac/mode/set", "fan_only")
+    await bridge.send_queued_commands({})
+    assert electra.applied == [{"mode": "fan_only"}]
+
+
 async def test_override_holds_until_sent_even_after_grace(setup):
     bridge, topics, _, _, clock, published = setup
     await bridge.poll_electra()

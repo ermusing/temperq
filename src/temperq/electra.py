@@ -33,6 +33,10 @@ ELECTRA_TO_HA_FAN = {v: k for k, v in HA_TO_ELECTRA_FAN.items()}
 HVAC_MODES = tuple(HA_TO_ELECTRA_MODE)
 FAN_MODES = tuple(HA_TO_ELECTRA_FAN)
 
+# Target temperature sent along with a mode change from HA. A deliberate hack: the AC's
+# own thermostat then runs flat out, and HA decides when to stop.
+MODE_TARGET_TEMPS = {"cool": 18.0, "heat": 26.0}
+
 
 class ElectraError(Exception):
     """Any failure talking to the Electra cloud."""
