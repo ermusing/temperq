@@ -10,6 +10,8 @@ It also translates between Home Assistant's climate vocabulary and Electra's val
 from __future__ import annotations
 
 import logging
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -39,6 +41,11 @@ RAW_KEYS = ("TURN_ON_OFF", "AC_MODE", "FANSPD", "SPT")
 # Target temperature sent along with a mode change from HA. A deliberate hack: the AC's
 # own thermostat then runs flat out, and HA decides when to stop.
 MODE_TARGET_TEMPS = {"cool": 18.0, "heat": 26.0}
+
+# The AC obeys a command that turns it on, but the cloud's telemetry keeps reporting it as
+# off until the AC gets a second command while running (the Electra app behaves the same).
+# So a command that sets an "on" mode is sent again after this many seconds.
+POWER_ON_RESEND_DELAY = 5.0
 
 
 class ElectraError(Exception):
@@ -145,8 +152,16 @@ def state_from_status(status: Any) -> AcState:
 class ElectraClient:
     """One ElectraSmart AC. Blocking; call from a single thread."""
 
-    def __init__(self, imei: str, token: str, device_id: str | None = None, timeout: float = 15.0):
+    def __init__(
+        self,
+        imei: str,
+        token: str,
+        device_id: str | None = None,
+        timeout: float = 15.0,
+        sleep: Callable[[float], None] = time.sleep,
+    ):
         _prepare_library(timeout)
+        self._sleep = sleep
         self._imei = imei
         self._token = token
         self._device_id = device_id
@@ -208,6 +223,16 @@ class ElectraClient:
             ac.modify_oper(**kwargs)
         except Exception as e:
             raise ElectraError(f"sending the command failed: {_describe(e)}") from e
+        if mode is None or mode == "off":
+            return
+        # Resend whenever the mode is "on": the telemetry can't tell us whether the AC
+        # was off, since that is exactly what it gets wrong. A repeat is harmless.
+        self._sleep(POWER_ON_RESEND_DELAY)
+        try:
+            ac.modify_oper(**kwargs)
+        except Exception as e:
+            # The AC already obeyed the first command; only the telemetry may stay stale.
+            log.warning("resending the power-on command failed: %s", _describe(e))
 
     def _require_ac(self) -> Any:
         if self._ac is None:
