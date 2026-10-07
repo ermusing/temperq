@@ -106,6 +106,14 @@ def test_invalid_sensor_settings(tmp_path, sensor, message):
         load_config(main, env={})
 
 
+def test_confirm_timeout_must_cover_the_grace_period(tmp_path):
+    main = write(
+        tmp_path / "config.yaml", {"electra": {"command_grace": 60, "command_confirm_timeout": 30}}
+    )
+    with pytest.raises(ConfigError, match="command_confirm_timeout"):
+        load_config(main, env={})
+
+
 def test_invalid_number(tmp_path):
     main = write(tmp_path / "config.yaml", {"mqtt": {"port": "abc"}})
     with pytest.raises(ConfigError, match="mqtt.port"):

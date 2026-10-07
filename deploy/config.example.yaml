@@ -16,7 +16,8 @@ mqtt:
 electra:
   # device_id: 12345        # only needed if the account has more than one AC (`temperq login` lists them)
   poll_interval: 60         # seconds between cloud status polls
-  command_grace: 20         # seconds a value set from HA is protected from stale cloud status
+  command_grace: 20         # seconds after a command before re-reading the AC's status
+  command_confirm_timeout: 180  # max seconds a value set from HA waits for the cloud to confirm it
   request_timeout: 15
   min_temp: 16
   max_temp: 30

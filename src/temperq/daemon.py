@@ -69,7 +69,8 @@ class Bridge:
         self.ac_available = False
         self._electra_failures = 0
         # field -> (value, deadline): values set from HA that telemetry must not overwrite
-        # until the deadline. The deadline is infinite while the command is still unsent.
+        # until it confirms them or the deadline passes. The deadline is infinite while
+        # the command is still unsent.
         self.overrides: dict[str, tuple[Any, float]] = {}
         self._commands: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
         self._refresh = asyncio.Event()
@@ -172,7 +173,7 @@ class Bridge:
         while not self._commands.empty():
             f, v = self._commands.get_nowait()
             changes[f] = v
-        grace = self._config.electra.command_grace
+        settings = self._config.electra
         try:
             await self._call_electra(self._electra.apply, **changes)
         except ElectraError as e:
@@ -181,12 +182,13 @@ class Bridge:
             self._refresh.set()  # show the AC's real state again
             return
         log.info("sent %s to the AC", changes)
-        self._settle_overrides(changes, self._clock() + grace)
-        asyncio.get_running_loop().call_later(grace, self._refresh.set)
+        self._settle_overrides(changes, self._clock() + settings.command_confirm_timeout)
+        # Give the cloud a moment, then check whether it reflects the change.
+        asyncio.get_running_loop().call_later(settings.command_grace, self._refresh.set)
 
     def _settle_overrides(self, changes: dict[str, Any], deadline: float | None) -> None:
-        """Start the grace window (or drop the override, if deadline is None) for each sent
-        field, unless a newer command for that field arrived in the meantime."""
+        """Start waiting for confirmation (or drop the override, if deadline is None) for
+        each sent field, unless a newer command for that field arrived in the meantime."""
         for f, v in changes.items():
             current = self.overrides.get(f)
             if current is None or current[0] != v:
@@ -227,12 +229,22 @@ class Bridge:
     async def _apply_telemetry(self, state: AcState) -> None:
         now = self._clock()
         for name in AC_FIELDS:
+            reported = getattr(state, name)
             pending = self.overrides.get(name)
             if pending is not None:
-                if pending[1] > now:
-                    continue
+                value, deadline = pending
+                confirmed = deadline != math.inf and reported == value
+                if not confirmed:
+                    if deadline > now:
+                        continue  # the cloud hasn't caught up yet; keep showing HA's value
+                    log.warning(
+                        "the AC still reports %s = %s instead of %s; giving up waiting",
+                        name,
+                        reported,
+                        value,
+                    )
                 del self.overrides[name]
-            setattr(self.ac, name, getattr(state, name))
+            setattr(self.ac, name, reported)
         await self._publish_ac_state()
 
     async def run_sensor_loop(self) -> None:

@@ -73,9 +73,9 @@ The package uses a `src/` layout in `src/temperq/`. The daemon is a single async
   1. It is validated. An invalid payload is logged and the current state is republished, so HA's UI snaps back.
   2. It is stored as an **override** with an infinite deadline, and published right away (optimistic update).
   3. It is queued. The command worker merges everything queued into one `apply()` call; the latest value for each field wins.
-  4. On success, the override's deadline becomes now + `command_grace`, and a refresh is scheduled for when the grace window ends.
+  4. On success, the override's deadline becomes now + `command_confirm_timeout` (180 s by default), and a refresh is scheduled after `command_grace`.
   5. On failure, the override is dropped and the daemon refreshes immediately.
-- Telemetry never overwrites a field whose override is still active. That stops the slow, eventually consistent cloud from flipping HA's UI back to the old value.
+- Telemetry never overwrites a field whose override is still active. The override ends as soon as telemetry reports the commanded value (only once the command has been sent), or, unconfirmed, when the deadline passes; then telemetry wins and a warning is logged. That stops the slow, eventually consistent cloud from flipping HA's UI back to the old value.
 - After 3 failed polls in a row, the AC is marked unavailable and its session is dropped, so the device is rediscovered. Polling backs off exponentially, up to 15 minutes.
 
 ### MQTT contract

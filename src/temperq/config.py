@@ -50,6 +50,7 @@ class ElectraConfig:
     device_id: str | None = None
     poll_interval: float = 60.0
     command_grace: float = 20.0
+    command_confirm_timeout: float = 180.0
     request_timeout: float = 15.0
     min_temp: int = 16
     max_temp: int = 30
@@ -83,6 +84,7 @@ SETTINGS_KEYS: dict[str, set[str]] = {
         "device_id",
         "poll_interval",
         "command_grace",
+        "command_confirm_timeout",
         "request_timeout",
         "min_temp",
         "max_temp",
@@ -256,6 +258,8 @@ def _validate(config: Config) -> None:
         raise ConfigError("electra.min_temp must be below electra.max_temp")
     if e.poll_interval <= 0 or e.command_grace < 0 or e.request_timeout <= 0:
         raise ConfigError("electra intervals must be positive")
+    if e.command_confirm_timeout < e.command_grace:
+        raise ConfigError("electra.command_confirm_timeout must be at least electra.command_grace")
     if not isinstance(logging.getLevelName(config.log_level.upper()), int):
         raise ConfigError(f"unknown log_level {config.log_level!r}")
     if not config.node_id or any(c in config.node_id for c in "/+# "):

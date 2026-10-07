@@ -85,16 +85,46 @@ async def test_command_is_optimistic_and_survives_stale_telemetry(setup):
     await bridge.send_queued_commands({})
     assert electra.applied == [{"target_temp": 21.0}]
 
-    # The cloud still reports the old value during the grace window.
+    # The cloud still reports the old value, well past the grace period.
     clock.now += 5
     await bridge.poll_electra()
     assert published[topics.target_temp] == "21"
+    clock.now += 120
+    await bridge.poll_electra()
+    assert published[topics.target_temp] == "21"
 
-    # After the window, telemetry wins again.
-    clock.now += 30
+    # Once the confirmation timeout (180 s) passes unconfirmed, telemetry wins again.
+    clock.now += 60
     await bridge.poll_electra()
     assert published[topics.target_temp] == "24"
     assert bridge.overrides == {}
+
+
+async def test_confirmed_command_releases_the_override(setup):
+    bridge, topics, electra, _, clock, published = setup
+    await bridge.poll_electra()
+    await bridge.handle_message("temperq/ac/mode/set", "off")
+    await bridge.send_queued_commands({})
+
+    clock.now += 20
+    electra.state.mode = "off"
+    await bridge.poll_electra()
+    assert published[topics.mode] == "off"
+    assert "mode" not in bridge.overrides
+
+    # A later change made outside HA (e.g. the IR remote) shows up right away.
+    clock.now += 60
+    electra.state.mode = "heat"
+    await bridge.poll_electra()
+    assert published[topics.mode] == "heat"
+
+
+async def test_matching_telemetry_does_not_release_an_unsent_command(setup):
+    bridge, topics, electra, _, clock, published = setup
+    await bridge.poll_electra()
+    await bridge.handle_message("temperq/ac/fan_mode/set", "low")  # already the cloud's value
+    await bridge.poll_electra()
+    assert bridge.overrides["fan_mode"] == ("low", float("inf"))
 
 
 async def test_queued_commands_are_merged(setup):
