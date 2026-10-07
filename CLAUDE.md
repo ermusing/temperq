@@ -103,6 +103,8 @@ On the Pi, run `sudo deploy/install.sh` from a checkout. The script turns on I2C
 
 Afterwards, `i2cdetect -y 1` should show the chip at `0x38`.
 
+For code-only changes, `git pull && sudo sh deploy/update.sh` is much faster. It copies `src/temperq` straight into the venv's site-packages, without pip, and restarts the service if it is running. It refuses to run if `pyproject.toml`'s dependencies no longer match what's installed; use `install.sh` then. It doesn't touch config files or the systemd unit.
+
 `.gitattributes` forces LF line endings on `.sh`, `.service` and `.yaml` files, so a Windows checkout still runs on the Pi.
 
 `install.sh` sets `PIP_EXTRA_INDEX_URL` to piwheels and `TMPDIR=/var/tmp`. Early 32-bit Trixie images didn't configure piwheels, and Trixie's `/tmp` is a small RAM-backed tmpfs. Every dependency should arrive as a wheel, so nothing needs compiling on the Pi.

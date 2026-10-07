@@ -239,3 +239,32 @@ async def test_implausible_reading_is_dropped(setup):
     await bridge.poll_sensor()
     assert topics.temperature not in published
     assert bridge.reading is None
+
+
+async def test_reported_state_is_logged_only_when_it_changes(setup, caplog):
+    bridge, _, electra, _, _, _ = setup
+    caplog.set_level("INFO", logger="temperq.daemon")
+    await bridge.poll_electra()
+    await bridge.poll_electra()
+    electra.state.mode = "heat"
+    await bridge.poll_electra()
+    reports = [r.getMessage() for r in caplog.records if r.getMessage().startswith("AC reports")]
+    assert len(reports) == 2
+    assert "mode=heat" in reports[1]
+
+
+async def test_confirmation_delay_is_logged(setup, caplog):
+    bridge, _, electra, _, clock, _ = setup
+    caplog.set_level("INFO", logger="temperq.daemon")
+    await bridge.poll_electra()
+    await bridge.handle_message("temperq/ac/mode/set", "off")
+    await bridge.send_queued_commands({})
+
+    clock.now += 20
+    await bridge.poll_electra()
+    assert "waiting for the AC to confirm mode = off; it still reports cool, 20 s" in caplog.text
+
+    clock.now += 60
+    electra.state.mode = "off"
+    await bridge.poll_electra()
+    assert "AC confirmed mode = off, 80 s after it was sent" in caplog.text

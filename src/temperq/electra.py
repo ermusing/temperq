@@ -10,7 +10,7 @@ It also translates between Home Assistant's climate vocabulary and Electra's val
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import requests
@@ -33,6 +33,9 @@ ELECTRA_TO_HA_FAN = {v: k for k, v in HA_TO_ELECTRA_FAN.items()}
 HVAC_MODES = tuple(HA_TO_ELECTRA_MODE)
 FAN_MODES = tuple(HA_TO_ELECTRA_FAN)
 
+# OPER fields worth showing when logging the AC's reported state.
+RAW_KEYS = ("TURN_ON_OFF", "AC_MODE", "FANSPD", "SPT")
+
 # Target temperature sent along with a mode change from HA. A deliberate hack: the AC's
 # own thermostat then runs flat out, and HA decides when to stop.
 MODE_TARGET_TEMPS = {"cool": 18.0, "heat": 26.0}
@@ -49,6 +52,8 @@ class AcState:
     mode: str | None = None
     fan_mode: str | None = None
     target_temp: float | None = None
+    # The raw Electra values these came from, for logging; e.g. "TURN_ON_OFF=ON AC_MODE=COOL".
+    raw: str = field(default="", compare=False)
 
 
 class _RequestsWithTimeout:
@@ -130,6 +135,7 @@ def state_from_status(status: Any) -> AcState:
         mode=ELECTRA_TO_HA_MODE.get(status.ac_mode),
         fan_mode=ELECTRA_TO_HA_FAN.get(fan),
         target_temp=float(spt) if spt not in (None, "") else None,
+        raw=" ".join(f"{k}={oper[k]}" for k in RAW_KEYS if k in oper),
     )
     if state.mode is None or state.fan_mode is None:
         log.debug("unmapped Electra values: AC_MODE=%r FANSPD=%r", status.ac_mode, fan)
@@ -172,7 +178,10 @@ class ElectraClient:
         ac = self._require_ac()
         try:
             ac.update_status()
-            return state_from_status(ac.status)
+            status = ac.status
+            # OPER holds only the AC's settings, no credentials.
+            log.debug("telemetry OPER: %s", status.raw.get("OPER"))
+            return state_from_status(status)
         except Exception as e:
             raise ElectraError(f"reading AC status failed: {_describe(e)}") from e
 

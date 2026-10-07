@@ -66,6 +66,7 @@ class Bridge:
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="electra")
 
         self.ac = AcState()
+        self._reported: AcState | None = None  # last telemetry, to log only changes
         self.ac_available = False
         self._electra_failures = 0
         # field -> (value, deadline): values set from HA that telemetry must not overwrite
@@ -228,20 +229,45 @@ class Bridge:
 
     async def _apply_telemetry(self, state: AcState) -> None:
         now = self._clock()
+        if state != self._reported:
+            log.info(
+                "AC reports mode=%s fan_mode=%s target_temp=%s (%s)",
+                state.mode,
+                state.fan_mode,
+                state.target_temp,
+                state.raw or "no OPER values",
+            )
+            self._reported = state
         for name in AC_FIELDS:
             reported = getattr(state, name)
             pending = self.overrides.get(name)
             if pending is not None:
                 value, deadline = pending
-                confirmed = deadline != math.inf and reported == value
-                if not confirmed:
-                    if deadline > now:
-                        continue  # the cloud hasn't caught up yet; keep showing HA's value
+                if deadline == math.inf:
+                    continue  # the command hasn't been sent yet
+                sent_ago = now - (deadline - self._config.electra.command_confirm_timeout)
+                if reported == value:
+                    log.info(
+                        "AC confirmed %s = %s, %.0f s after it was sent", name, value, sent_ago
+                    )
+                elif deadline > now:
+                    log.info(
+                        "waiting for the AC to confirm %s = %s; it still reports %s, %.0f s after "
+                        "it was sent",
+                        name,
+                        value,
+                        reported,
+                        sent_ago,
+                    )
+                    continue  # keep showing HA's value
+                else:
                     log.warning(
-                        "the AC still reports %s = %s instead of %s; giving up waiting",
+                        "the AC still reports %s = %s instead of %s, %.0f s after it was sent; "
+                        "giving up waiting",
                         name,
                         reported,
                         value,
+                        sent_ago,
                     )
                 del self.overrides[name]
             setattr(self.ac, name, reported)

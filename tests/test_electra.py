@@ -46,3 +46,8 @@ def test_several_devices_need_device_id():
 def test_unknown_device_id():
     with pytest.raises(ElectraError, match="not on this account"):
         select_device(DEVICES, "999")
+
+
+def test_state_keeps_raw_values_for_logging():
+    status = FakeStatus({"TURN_ON_OFF": "OFF", "AC_MODE": "COOL", "FANSPD": "LOW", "SPT": "24"})
+    assert state_from_status(status).raw == "TURN_ON_OFF=OFF AC_MODE=COOL FANSPD=LOW SPT=24"
